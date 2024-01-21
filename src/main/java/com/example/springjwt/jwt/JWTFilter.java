@@ -1,37 +1,54 @@
 package com.example.springjwt.jwt;
 
+import com.example.springjwt.constant.Role;
 import com.example.springjwt.dto.CMResDto;
 import com.example.springjwt.dto.CustomUserDetails;
 import com.example.springjwt.dto.TokenResponseDto;
+import com.example.springjwt.entity.RefreshToken;
 import com.example.springjwt.entity.UserEntity;
+import com.example.springjwt.repository.RefreshTokenRepository;
 import com.example.springjwt.repository.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.Jwts;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.apache.catalina.User;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+import javax.security.auth.Subject;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.Map;
+import java.util.Objects;
 
 public class JWTFilter extends OncePerRequestFilter {
+
+    @Value("${application.security.jwt.expireT}")
+    private Long jwtExpiration;
+
+    @Value("${application.security.jwt.ReFreshexpireT}")
+    private Long RefreshjwtExpiration;
 
     private final JWTUtil jwtUtil;
 
     private final UserRepository userRepository;
 
-    public JWTFilter(JWTUtil jwtUtil, UserRepository userRepository) {
+    private final RefreshTokenRepository refreshTokenRepository;
+
+
+    public JWTFilter(JWTUtil jwtUtil, UserRepository userRepository , RefreshTokenRepository refreshTokenRepository) {
         this.userRepository = userRepository;
         this.jwtUtil = jwtUtil;
+        this.refreshTokenRepository = refreshTokenRepository;
     }
 
 
@@ -40,6 +57,7 @@ public class JWTFilter extends OncePerRequestFilter {
 
         //request에서 Authorization 헤더를 찾음
         String authorization = request.getHeader("Authorization");
+        System.out.println("authorization = " + authorization);
 
         //Authorization 헤더 검증
         if (authorization == null || !authorization.startsWith("Bearer ")) {
@@ -52,6 +70,7 @@ public class JWTFilter extends OncePerRequestFilter {
         }
         // 헤더가 있기 때문에 헤더를 추출
         String token = authorization.split(" ")[1];
+        System.out.println("token = " + token);
 
         // 헤더가 만료되었는 확인
         try {
@@ -72,23 +91,72 @@ public class JWTFilter extends OncePerRequestFilter {
             return;
         }
 
+
+        String type = jwtUtil.getType(token);
+        System.out.println("1.type = " + type);
+
         String email = jwtUtil.getEmail(token);
+        System.out.println("1.email = " + email);
         String role = jwtUtil.getRole(token);
 
+        if(Objects.equals(type, "RTK")){
+            if(refreshTokenRepository.existsByRefreshToken(token)){
+                refreshTokenRepository.deleteByUserEmail(email);
+                String newAccessToken = jwtUtil.createAccessJwt(email,role,jwtExpiration);
+                String newRefreshtoken = jwtUtil.createRefreshJwt(email, role, RefreshjwtExpiration);
+                saveRefreshTokenToDatabase(email,newRefreshtoken);
+                System.out.println("Hello");
+
+                TokenResponseDto tokenResponseDto = new TokenResponseDto();
+                tokenResponseDto.setAccesstoken(newAccessToken);
+                tokenResponseDto.setRefreshtoken(newRefreshtoken);
+
+                CMResDto<TokenResponseDto> cmRespDto = CMResDto.<TokenResponseDto>builder()
+                        .code(200)
+                        .msg("새로운 토큰 발급 Success")
+                        .data(tokenResponseDto)
+                        .build();
+
+                writeResponse(response, cmRespDto);
+
+                return;
+
+            }else{
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                CMResDto<Void> cmRespDto = CMResDto.<Void>builder()
+                        .code(HttpServletResponse.SC_UNAUTHORIZED) // 401 Unauthorized
+                        .msg("Refresh토큰이 없습니다. 다시 로그인 해주세요")
+                        .build();
+
+                writeResponse(response, cmRespDto);
+
+                //filterChain.doFilter(request, response);
+                return;
+            }
+        }
+        System.out.println("HelloAA");
+
         UserEntity userEntity = new UserEntity();
-        userEntity.setUsername("username");
+        userEntity.setUserName("username");
         userEntity.setPassword("temppassword");
-        userEntity.setEmail(email);
-        userEntity.setRole(role);
+        userEntity.setUserEmail(email);
+        userEntity.setUserRole(Role.valueOf(role));
+        userEntity.setUserMileage(1000);
+        userEntity.setUserAddressDetail("AddressDetail");
+        userEntity.setUserAddress("UserAddress");
+        userEntity.setUserPostalCode(7);
+        userEntity.setUserDktNum(777);
+        userEntity.setUserPhoneNum("77-89");
+
 
         CustomUserDetails customUserDetails = new CustomUserDetails(userEntity);
 
         Authentication authToken = new UsernamePasswordAuthenticationToken(customUserDetails, null, customUserDetails.getAuthorities());
 
         SecurityContextHolder.getContext().setAuthentication(authToken);
-
         filterChain.doFilter(request, response);
     }
+
     // JSON 응답을 생성하는 메소드
     private void writeResponse(HttpServletResponse response, CMResDto<?> cmRespDto) {
         try {
@@ -114,5 +182,12 @@ public class JWTFilter extends OncePerRequestFilter {
             // 에러 핸들링
             e.printStackTrace();
         }
+    }
+    private void saveRefreshTokenToDatabase(String userEmail, String refreshToken) {
+        RefreshToken refreshTokendata = new RefreshToken();
+        refreshTokendata.setUserEmail(userEmail);
+        refreshTokendata.setRefreshToken(refreshToken);
+
+        refreshTokenRepository.save(refreshTokendata);
     }
 }

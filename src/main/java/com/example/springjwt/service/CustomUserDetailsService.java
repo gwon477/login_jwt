@@ -22,7 +22,7 @@ public class CustomUserDetailsService implements UserDetailsService {
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
 
         //UserEntity userData = userRepository.findByUsername(email);
-        UserEntity userData = userRepository.findByemail(email);
+        UserEntity userData = userRepository.findByUserEmail(email);
 
         if (userData != null) {
 
