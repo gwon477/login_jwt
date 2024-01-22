@@ -134,7 +134,6 @@ public class JWTFilter extends OncePerRequestFilter {
                 return;
             }
         }
-        System.out.println("HelloAA");
 
         UserEntity userEntity = new UserEntity();
         userEntity.setUserName("username");

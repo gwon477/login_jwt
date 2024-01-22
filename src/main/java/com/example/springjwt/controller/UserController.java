@@ -35,4 +35,7 @@ public class UserController {
         return "Admin SM Page";
     }
 
+    @GetMapping("/user/a")
+    public String testP(){return "test success";}
+
 }

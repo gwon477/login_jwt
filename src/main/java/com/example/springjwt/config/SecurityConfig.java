@@ -1,11 +1,12 @@
 package com.example.springjwt.config;
-
 import com.example.springjwt.jwt.JWTFilter;
 import com.example.springjwt.jwt.JWTUtil;
 import com.example.springjwt.jwt.LoginFilter;
+import com.example.springjwt.repository.LoginLogRepository;
 import com.example.springjwt.repository.RefreshTokenRepository;
 import com.example.springjwt.repository.UserRepository;
 import com.example.springjwt.service.LogoutService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
@@ -14,9 +15,9 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
@@ -24,36 +25,26 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 @Configuration
 @EnableWebSecurity
+@RequiredArgsConstructor
 public class SecurityConfig {
-
-    private final AuthenticationConfiguration authenticationConfiguration;
-    private final JWTUtil jwtUtil;
-
-    private final RefreshTokenRepository refreshTokenRepository;
-
-    private final UserRepository userRepository;
-    private final LogoutService logoutService;
-
-    public SecurityConfig(AuthenticationConfiguration authenticationConfiguration, JWTUtil jwtUtil, UserRepository userRepository, RefreshTokenRepository refreshTokenRepository, LogoutService logoutService) {
-
-        this.authenticationConfiguration = authenticationConfiguration;
-        this.jwtUtil = jwtUtil;
-        this.userRepository = userRepository;
-        this.refreshTokenRepository = refreshTokenRepository;
-        this.logoutService = logoutService;
+    // 비밀번호 인코더
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
     }
-
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration configuration) throws Exception {
 
         return configuration.getAuthenticationManager();
     }
 
-    // 비밀번호 인코더
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
-    }
+
+    private final AuthenticationConfiguration authenticationConfiguration;
+    private final JWTUtil jwtUtil;
+    private final RefreshTokenRepository refreshTokenRepository;
+    private final UserRepository userRepository;
+    private final LogoutService logoutService;
+    private final LoginLogRepository loginLogRepository;
 
     @Bean
     public RoleHierarchy roleHierarchy() {
@@ -68,6 +59,7 @@ public class SecurityConfig {
 
         return hierarchy;
     }
+
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -84,27 +76,33 @@ public class SecurityConfig {
         http
                 .httpBasic((auth) -> auth.disable());
 
-
+        // 접근 제한
         http
                 .authorizeHttpRequests((auth) -> auth
-                        .requestMatchers("/login", "/", "/join").permitAll()
+                        .requestMatchers("/api/users/login", "/", "/join").permitAll()
                         .requestMatchers("/admin/GM").hasRole("GM")
                         .requestMatchers("/admin/PM").hasRole("PM")
                         .requestMatchers("/admin/SM").hasRole("SM")
-                        .requestMatchers("/user").hasRole("USER")
+                        .requestMatchers("/user/**").hasRole("USER")
                         .anyRequest().authenticated()
                 );
 
 
+        // 로그인 필터 커스텀
         http
                 .addFilterBefore(new JWTFilter(jwtUtil, userRepository, refreshTokenRepository), LoginFilter.class);
+
+        // 로그인 필터 커스텀
         http
-                .addFilterAt(new LoginFilter(authenticationManager(authenticationConfiguration), jwtUtil,refreshTokenRepository), UsernamePasswordAuthenticationFilter.class);
+                .addFilterAt(new LoginFilter(authenticationManager(authenticationConfiguration), jwtUtil,refreshTokenRepository,loginLogRepository), UsernamePasswordAuthenticationFilter.class);
+
+        // 로그아웃 설정
         http
                 .logout((logout) -> logout.logoutUrl("/logout")
                         .addLogoutHandler(logoutService)
                         .logoutSuccessHandler((request, response, authentication) -> SecurityContextHolder.clearContext())
                 );
+
         //세션 설정
         http
                 .sessionManagement((session) -> session
@@ -112,4 +110,7 @@ public class SecurityConfig {
 
         return http.build();
     }
+
+
+
 }

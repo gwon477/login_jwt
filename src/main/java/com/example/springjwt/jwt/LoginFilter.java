@@ -3,7 +3,9 @@ package com.example.springjwt.jwt;
 import com.example.springjwt.dto.CMResDto;
 import com.example.springjwt.dto.CustomUserDetails;
 import com.example.springjwt.dto.TokenResponseDto;
+import com.example.springjwt.entity.LoginLog;
 import com.example.springjwt.entity.RefreshToken;
+import com.example.springjwt.repository.LoginLogRepository;
 import com.example.springjwt.repository.RefreshTokenRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -11,6 +13,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -23,19 +26,23 @@ import java.text.SimpleDateFormat;
 import java.util.Collection;
 import java.util.Iterator;
 
+
 public class LoginFilter extends UsernamePasswordAuthenticationFilter {
 
     private final AuthenticationManager authenticationManager;
     private final JWTUtil jwtUtil;
 
     private final RefreshTokenRepository refreshTokenRepository;
+    private final LoginLogRepository loginLogRepository;
 
 
-    public LoginFilter(AuthenticationManager authenticationManager, JWTUtil jwtUtil, RefreshTokenRepository refreshTokenRepository) {
+    public LoginFilter(AuthenticationManager authenticationManager, JWTUtil jwtUtil, RefreshTokenRepository refreshTokenRepository,LoginLogRepository loginLogRepository) {
 
         this.authenticationManager = authenticationManager;
         this.jwtUtil = jwtUtil;
         this.refreshTokenRepository=refreshTokenRepository;
+        this.loginLogRepository = loginLogRepository;
+        setFilterProcessesUrl("/api/users/login");
     }
 
     @Override
@@ -67,6 +74,10 @@ public class LoginFilter extends UsernamePasswordAuthenticationFilter {
 
         String username = customUserDetails.getUsername();
         String email = customUserDetails.getEmail();
+
+        LoginLog loginLog = new LoginLog();
+        loginLog.setLoginLogContents(username);
+        loginLogRepository.save(loginLog);
 
         Collection<? extends GrantedAuthority> authorities = authentication.getAuthorities();
         Iterator<? extends GrantedAuthority> iterator = authorities.iterator();
