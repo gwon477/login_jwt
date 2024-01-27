@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
 @Getter
 @Setter
 @NoArgsConstructor
+//@RedisHash(value = "jwtToken", timeToLive = 60*60*24*3)
 public class RefreshToken{
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -25,6 +26,10 @@ public class RefreshToken{
     private String refreshToken;
 
     @CreatedDate
-    @Column(nullable = false)
     private LocalDateTime refreshTokenexpiredDate= LocalDateTime.now();;
+
+    public RefreshToken(String userEmail, String refreshToken){
+        this.userEmail=userEmail;
+        this.refreshToken=refreshToken;
+    }
 }

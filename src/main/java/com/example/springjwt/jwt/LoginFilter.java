@@ -5,15 +5,19 @@ import com.example.springjwt.dto.CustomUserDetails;
 import com.example.springjwt.dto.TokenResponseDto;
 import com.example.springjwt.entity.LoginLog;
 import com.example.springjwt.entity.RefreshToken;
+import com.example.springjwt.entity.RefreshTokenRedis;
 import com.example.springjwt.repository.LoginLogRepository;
+import com.example.springjwt.repository.RefreshTokenRedisRepository;
 import com.example.springjwt.repository.RefreshTokenRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import jakarta.annotation.PostConstruct;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -35,13 +39,20 @@ public class LoginFilter extends UsernamePasswordAuthenticationFilter {
     private final RefreshTokenRepository refreshTokenRepository;
     private final LoginLogRepository loginLogRepository;
 
+    //***************
+    private final RefreshTokenRedisRepository refreshTokenRedisRepository;
 
-    public LoginFilter(AuthenticationManager authenticationManager, JWTUtil jwtUtil, RefreshTokenRepository refreshTokenRepository,LoginLogRepository loginLogRepository) {
 
+    public LoginFilter(AuthenticationManager authenticationManager,
+                       JWTUtil jwtUtil,
+                       RefreshTokenRepository refreshTokenRepository,
+                       LoginLogRepository loginLogRepository,
+                       RefreshTokenRedisRepository refreshTokenRedisRepository) {
         this.authenticationManager = authenticationManager;
         this.jwtUtil = jwtUtil;
         this.refreshTokenRepository=refreshTokenRepository;
         this.loginLogRepository = loginLogRepository;
+        this.refreshTokenRedisRepository = refreshTokenRedisRepository;
         setFilterProcessesUrl("/api/users/login");
     }
 
@@ -69,7 +80,6 @@ public class LoginFilter extends UsernamePasswordAuthenticationFilter {
     // 요청받은 정보가 DB에 있는 사용자인 경우
     @Override
     protected void successfulAuthentication(HttpServletRequest request, HttpServletResponse response, FilterChain chain, Authentication authentication) {
-
         CustomUserDetails customUserDetails = (CustomUserDetails) authentication.getPrincipal();
 
         String username = customUserDetails.getUsername();
@@ -86,12 +96,15 @@ public class LoginFilter extends UsernamePasswordAuthenticationFilter {
         String role = auth.getAuthority();
 
         // AccessToken 만료 시간 6분
-        String accesstoken = jwtUtil.createAccessJwt( email, role, 6*60*1000L);
+        String accesstoken = jwtUtil.createAccessJwt( email, role);
 
         // RefreshToken 만료 시간 24시간
-        String refreshtoken = jwtUtil.createRefreshJwt(email, role, 24 * 60 * 60 * 1000L);
-
+        String refreshtoken = jwtUtil.createRefreshJwt(email,role);
+        System.out.println("7!");
         saveRefreshTokenToDatabase(email,refreshtoken);
+
+        // redis 적용해보기
+        refreshTokenRedisRepository.save(new RefreshTokenRedis(refreshtoken,accesstoken, email));
 
         TokenResponseDto tokenResponseDto = new TokenResponseDto();
         tokenResponseDto.setAccesstoken(accesstoken);

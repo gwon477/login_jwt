@@ -1,7 +1,10 @@
 package com.example.springjwt.jwt;
 
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.Jwts;
+import jakarta.transaction.Transactional;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -41,28 +44,27 @@ public class JWTUtil {
     }
 
 
-    public String createAccessJwt(String email, String role, Long expiredMs) {
+    public String createAccessJwt(String email, String role) {
         return Jwts.builder()
                 //.claim("username", username)
                 .claim("role", role)
                 .claim("email",email)
                 .claim("type","ATK")
                 .issuedAt(new Date(System.currentTimeMillis()))
-                .expiration(new Date(System.currentTimeMillis() + expiredMs))
+                .expiration(new Date(System.currentTimeMillis() + 6*60*1000))
                 .signWith(secretKey)
                 .compact();
     }
-    public String createRefreshJwt(String email, String role, Long expiredMs) {
+
+    public String createRefreshJwt(String email, String role) {
         return Jwts.builder()
                 //.claim("username", username)
                 .claim("role", role)
                 .claim("email",email)
                 .claim("type","RTK")
                 .issuedAt(new Date(System.currentTimeMillis()))
-                .expiration(new Date(System.currentTimeMillis() + expiredMs))
+                .expiration(new Date(System.currentTimeMillis() + 24 * 60 * 60 * 1000))
                 .signWith(secretKey)
                 .compact();
     }
-
-
 }

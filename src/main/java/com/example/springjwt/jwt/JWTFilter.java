@@ -5,7 +5,9 @@ import com.example.springjwt.dto.CMResDto;
 import com.example.springjwt.dto.CustomUserDetails;
 import com.example.springjwt.dto.TokenResponseDto;
 import com.example.springjwt.entity.RefreshToken;
+import com.example.springjwt.entity.RefreshTokenRedis;
 import com.example.springjwt.entity.UserEntity;
+import com.example.springjwt.repository.RefreshTokenRedisRepository;
 import com.example.springjwt.repository.RefreshTokenRepository;
 import com.example.springjwt.repository.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -17,6 +19,8 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.transaction.Transactional;
+import lombok.RequiredArgsConstructor;
 import org.apache.catalina.User;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -30,12 +34,13 @@ import java.text.SimpleDateFormat;
 import java.util.Map;
 import java.util.Objects;
 
+
 public class JWTFilter extends OncePerRequestFilter {
 
-    @Value("${application.security.jwt.expireT}")
+    @Value("${spring.jwt.expireT}")
     private Long jwtExpiration;
 
-    @Value("${application.security.jwt.ReFreshexpireT}")
+    @Value("${spring.jwt.ReFreshexpireT}")
     private Long RefreshjwtExpiration;
 
     private final JWTUtil jwtUtil;
@@ -44,16 +49,19 @@ public class JWTFilter extends OncePerRequestFilter {
 
     private final RefreshTokenRepository refreshTokenRepository;
 
+    private final RefreshTokenRedisRepository refreshTokenRedisRepository;
 
-    public JWTFilter(JWTUtil jwtUtil, UserRepository userRepository , RefreshTokenRepository refreshTokenRepository) {
-        this.userRepository = userRepository;
-        this.jwtUtil = jwtUtil;
-        this.refreshTokenRepository = refreshTokenRepository;
+
+    public JWTFilter(JWTUtil jwtUtil,UserRepository userRepository,RefreshTokenRepository refreshTokenRepository,RefreshTokenRedisRepository refreshTokenRedisRepository){
+        this.jwtUtil=jwtUtil;
+        this.refreshTokenRepository=refreshTokenRepository;
+        this.userRepository=userRepository;
+        this.refreshTokenRedisRepository=refreshTokenRedisRepository;
     }
 
-
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
+    @Transactional
+    public void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
 
         //request에서 Authorization 헤더를 찾음
         String authorization = request.getHeader("Authorization");
@@ -100,12 +108,14 @@ public class JWTFilter extends OncePerRequestFilter {
         String role = jwtUtil.getRole(token);
 
         if(Objects.equals(type, "RTK")){
-            if(refreshTokenRepository.existsByRefreshToken(token)){
-                refreshTokenRepository.deleteByUserEmail(email);
-                String newAccessToken = jwtUtil.createAccessJwt(email,role,jwtExpiration);
-                String newRefreshtoken = jwtUtil.createRefreshJwt(email, role, RefreshjwtExpiration);
-                saveRefreshTokenToDatabase(email,newRefreshtoken);
-                System.out.println("Hello");
+            if(refreshTokenRedisRepository.existsById(token)){
+                System.out.println("YES");
+                refreshTokenRedisRepository.deleteById(token);
+                String newAccessToken = jwtUtil.createAccessJwt(email,role);
+                String newRefreshtoken = jwtUtil.createRefreshJwt(email,role);
+                refreshTokenRedisRepository.save(new RefreshTokenRedis(newRefreshtoken,newAccessToken, email));
+                System.out.println("ALLRIGHT");
+
 
                 TokenResponseDto tokenResponseDto = new TokenResponseDto();
                 tokenResponseDto.setAccesstoken(newAccessToken);
@@ -182,11 +192,5 @@ public class JWTFilter extends OncePerRequestFilter {
             e.printStackTrace();
         }
     }
-    private void saveRefreshTokenToDatabase(String userEmail, String refreshToken) {
-        RefreshToken refreshTokendata = new RefreshToken();
-        refreshTokendata.setUserEmail(userEmail);
-        refreshTokendata.setRefreshToken(refreshToken);
 
-        refreshTokenRepository.save(refreshTokendata);
-    }
 }
